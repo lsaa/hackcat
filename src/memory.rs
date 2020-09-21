@@ -9,7 +9,7 @@ pub struct RAM16K {
 impl RAM16K {
     pub fn new() -> Self {
         Self {
-            mem_32: vec![0; 0xFFFF],
+            mem_32: vec![0; 0xFFFFF],
         }
     }
 

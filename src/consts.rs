@@ -1,6 +1,6 @@
 use olc_pixel_game_engine as olc;
 
-pub const INPUTS: [(olc::Key, char, char); 43] = [
+pub const INPUTS: [(olc::Key, char, char); 47] = [
     (olc::Key::A, 'a', 'A'),
     (olc::Key::B, 'b', 'B'),
     (olc::Key::C, 'c', 'C'),
@@ -43,5 +43,9 @@ pub const INPUTS: [(olc::Key, char, char); 43] = [
     (olc::Key::NP_SUB, '-', '-'),
     (olc::Key::NP_DECIMAL, '.', '.'),
     (olc::Key::PERIOD, '.', '>'),
-    (olc::Key::SPACE, ' ', ' ')
+    (olc::Key::SPACE, ' ', ' '),
+    (olc::Key::LEFT, 130 as char, 130 as char),
+    (olc::Key::UP, 131 as char, 131 as char),
+    (olc::Key::RIGHT, 132 as char, 132 as char),
+    (olc::Key::DOWN, 133 as char, 133 as char),
 ];

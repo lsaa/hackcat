@@ -4,7 +4,7 @@ pub struct CPU {
     pub register_a: u16,
     pub register_d: u16,
     pub pc: u16,
-    pub cc: u64,
+    pub cc: u128,
     pub rom: ROM32K,
     pub ram: RAM16K,
 }
@@ -18,6 +18,20 @@ impl CPU {
             cc: 0,
             ram: RAM16K::new(),
             rom: ROM32K::new()
+        }
+    }
+
+    pub fn reset(&mut self) {
+        let rom = &self.rom.raw_program;
+        let mut new_rom = ROM32K::new();
+        new_rom.load_program(rom.clone());
+        *self = Self {
+            register_a: 0,
+            register_d: 0,
+            pc: 0,
+            cc: 0,
+            ram: RAM16K::new(),
+            rom: new_rom
         }
     }
 
@@ -45,20 +59,20 @@ impl CPU {
                 match (opcode & 0b0000111111000000) >> 6 {
                     0b101010 => 0,
                     0b111111 => 1,
-                    0b111010 => 0b1111111111111111,
+                    0b111010 => -1_i16 as u16,
                     0b001100 => self.register_d,
                     0b110000 => self.register_a,
                     0b001101 => !self.register_d,
                     0b110001 => !self.register_a,
-                    0b001111 => !self.register_d + 1,
-                    0b110011 => !self.register_a + 1,
-                    0b011111 => self.register_d + 1,
-                    0b110111 => self.register_a + 1,
-                    0b001110 => self.register_d + (!1 + 1),
-                    0b110010 => self.register_a + (!1 + 1),
-                    0b000010 => self.register_d + self.register_a,
-                    0b010011 => self.register_d + (!self.register_a + 1),
-                    0b000111 => self.register_a + (!self.register_d + 1),
+                    0b001111 => (!self.register_d).overflowing_add(1).0,
+                    0b110011 => (!self.register_a).overflowing_add(1).0,
+                    0b011111 => self.register_d.overflowing_add(1).0,
+                    0b110111 => self.register_a.overflowing_add(1).0,
+                    0b001110 => self.register_d.overflowing_add((!1_u16).overflowing_add(1).0).0,
+                    0b110010 => self.register_a.overflowing_add((!1_u16).overflowing_add(1).0).0,
+                    0b000010 => self.register_d.overflowing_add(self.register_a).0,
+                    0b010011 => self.register_d.overflowing_add((!self.register_a).overflowing_add(1).0).0,
+                    0b000111 => self.register_a.overflowing_add((!self.register_d).overflowing_add(1).0).0,
                     0b000000 => self.register_d & self.register_a,
                     0b010101 => self.register_d | self.register_a,
                     _ => 0
@@ -68,26 +82,25 @@ impl CPU {
                 match (opcode & 0b0000111111000000) >> 6 {
                     0b110000 => *self.ram.read_u16(self.register_a),
                     0b110001 => !*self.ram.read_u16(self.register_a),
-                    0b110011 => !*self.ram.read_u16(self.register_a) + 1,
-                    0b110111 => *self.ram.read_u16(self.register_a) + 1,
-                    0b110010 => *self.ram.read_u16(self.register_a) + (!1 + 1),
+                    0b110011 => (!*self.ram.read_u16(self.register_a)).overflowing_add(1).0,
+                    0b110111 => (*self.ram.read_u16(self.register_a)).overflowing_add(1).0,
+                    0b110010 => (*self.ram.read_u16(self.register_a)).overflowing_add((!1_u16).overflowing_add(1).0).0,
                     0b000010 => self.register_d.overflowing_add(*self.ram.read_u16(self.register_a)).0 ,
-                    0b010011 => self.register_d.overflowing_add(!*self.ram.read_u16(self.register_a) + 1).0,
-                    0b000111 => (*self.ram.read_u16(self.register_a)).overflowing_add(!self.register_d + 1).0,
+                    0b010011 => self.register_d.overflowing_add((!*self.ram.read_u16(self.register_a)).overflowing_add(1).0).0,
+                    0b000111 => (*self.ram.read_u16(self.register_a)).overflowing_add((!self.register_d).overflowing_add(1).0).0,
                     0b000000 => self.register_d & *self.ram.read_u16(self.register_a),
-                    0b010101 => *self.ram.read_u16(self.register_a) | self.register_a,
+                    0b010101 => *self.ram.read_u16(self.register_a) | self.register_d,
                     _ => 0
                 }
             },
             _ => 0
         };
 
-        let (a, d , m) = match (opcode & 0b111000) >> 3 {
-            v => (v & 0b100 == 0b100, v & 0b010 == 0b010, v & 0b001 == 0b001), 
-        };
+        let v = (opcode & 0b111000) >> 3;
+        let (a, d , m) = (v & 0b100 == 0b100, v & 0b010 == 0b010, v & 0b001 == 0b001);
 
-        if a {self.register_a = out}
         if m {self.ram.write_u16(self.register_a, out);}
+        if a {self.register_a = out}
         if d {self.register_d = out}
 
         let out = out as i16;
@@ -113,10 +126,10 @@ impl CPU {
             let lo = *self.rom.read_byte((pc + 1) as u16) as u16;
             let instruction: u16 = (hi << 8) | lo;    
             match instruction & 0b1000000000000000 {
-                0b0000000000000000 => instructions.push(format!("{}: A = {}",pc/2, instruction & 0b0111111111111111)),
+                0b0000000000000000 => instructions.push(format!("{}: @{}",pc/2, instruction & 0b0111111111111111)),
                 0b1000000000000000 => {
                     let (dst, cmp, jmp) = CPU::disassemble_c(instruction);
-                    instructions.push(format!("{}: {}{} ; {}", pc/2, dst, cmp, jmp))
+                    instructions.push(format!("{}: {}{}; {}", pc/2, dst, cmp, jmp))
                 },
                 _ => ()
             }
@@ -181,12 +194,12 @@ impl CPU {
 
         let jmp = match opcode & 0b111 {
             0b000 => "",
-            0b001 => "JGE",
+            0b001 => "JGT",
             0b010 => "JEQ",
-            0b011 => "JGT",
+            0b011 => "JGE",
             0b100 => "JLT",
             0b101 => "JNE",
-            0b110 => "JLT",
+            0b110 => "JLE",
             0b111 => "JMP",
             _ => ""
         };
